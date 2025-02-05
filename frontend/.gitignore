@@ -44,4 +44,4 @@ next-env.d.ts
 .env.sentry-build-plugin
 
 # custom
-docker/data/storage/*
+docker/*

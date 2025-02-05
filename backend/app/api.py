@@ -4,8 +4,8 @@ from django.utils import timezone
 from ninja import File, PatchDict, Router
 from ninja.files import UploadedFile
 
-from .models import Media, Task
-from .schemas import CreateTaskSchema, MediaSchema, TaskSchema, DetailTaskSchema
+from .models import Media, Task, Notification
+from .schemas import CreateTaskSchema, MediaSchema, TaskSchema, DetailTaskSchema, NotificationSchema
 
 router = Router(tags=["Tasks"])
 
@@ -117,3 +117,13 @@ def delete_file(request, file_id: int):
     file.delete()
     return 204, None
 
+
+@router.get("/notifications", response=list[NotificationSchema])
+def get_notifications(request):
+    return Notification.objects.filter(user=request.auth, is_read=False).order_by("-created_at")
+
+
+@router.post("/notifications/mark-all-read", response={200: None})
+def mark_all_read(request):
+    return Notification.objects.filter(user=request.auth, is_read=False).update(is_read=True)
+    

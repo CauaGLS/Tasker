@@ -2,7 +2,7 @@
 
 import { TaskStatus, TasksService } from "@/services";
 import { DetailTaskSchema } from "@/services";
-import { TaskServiceWrapper } from "@/lib/TaskServiceWrapper";
+import { TaskServiceWrapper } from "@/lib/task-service-wrapper";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { TagInput } from "emblor";

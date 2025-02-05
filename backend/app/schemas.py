@@ -3,7 +3,7 @@ from datetime import datetime
 from core.schemas import UserSchema
 from ninja import ModelSchema, Schema
 
-from .models import Media, Task
+from .models import Media, Task, Notification
 from .types import TaskStatus
 
 
@@ -52,4 +52,14 @@ class ArchiveTaskSchema(Schema):
     status: TaskStatus
 
 
+class NotificationSchema(ModelSchema):
+    id: int
+    user: UserSchema
+    task: TaskSchema | None
+    message: str
+    is_read: bool
+    created_at: datetime
 
+    class Meta:
+        model = Notification
+        fields = "__all__"

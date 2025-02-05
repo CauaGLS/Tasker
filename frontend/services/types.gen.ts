@@ -44,6 +44,15 @@ export type MediaSchema = {
     task?: (number | null);
 };
 
+export type NotificationSchema = {
+    id: number;
+    user: UserSchema;
+    task: (TaskSchema | null);
+    message: string;
+    is_read: boolean;
+    created_at: string;
+};
+
 export type TaskSchema = {
     id: number;
     created_by: UserSchema;
@@ -128,3 +137,7 @@ export type DeleteFileData = {
 };
 
 export type DeleteFileResponse = (void);
+
+export type GetNotificationsResponse = (Array<NotificationSchema>);
+
+export type MarkAllReadResponse = (unknown);

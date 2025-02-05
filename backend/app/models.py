@@ -116,3 +116,18 @@ class Media(models.Model):
 
     def __str__(self):
         return self.file.name
+    
+
+class Notification(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    task = models.ForeignKey(Task, on_delete=models.CASCADE, null=True, blank=True)
+    message = models.TextField()
+    is_read = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "notifications"
+        ordering = ["-created_at"]
+    
+    def __str__(self):
+        return f"Notificação para {self.user.name}: {self.message}"

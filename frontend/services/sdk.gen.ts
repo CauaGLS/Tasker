@@ -3,7 +3,7 @@
 import type { CancelablePromise } from './core/CancelablePromise';
 import { OpenAPI } from './core/OpenAPI';
 import { request as __request } from './core/request';
-import type { GetTasksResponse, CreateTaskData, CreateTaskResponse, GetArchivedTasksResponse, GetTaskData, GetTaskResponse, UpdateTaskData, UpdateTaskResponse, DeleteTaskData, DeleteTaskResponse, ForceDeleteTaskData, ForceDeleteTaskResponse, RestoreTaskData, RestoreTaskResponse, UploadFileData, UploadFileResponse, DeleteFileData, DeleteFileResponse } from './types.gen';
+import type { GetTasksResponse, CreateTaskData, CreateTaskResponse, GetArchivedTasksResponse, GetTaskData, GetTaskResponse, UpdateTaskData, UpdateTaskResponse, DeleteTaskData, DeleteTaskResponse, ForceDeleteTaskData, ForceDeleteTaskResponse, RestoreTaskData, RestoreTaskResponse, UploadFileData, UploadFileResponse, DeleteFileData, DeleteFileResponse, GetNotificationsResponse, MarkAllReadResponse } from './types.gen';
 
 export class TasksService {
     /**
@@ -168,6 +168,30 @@ export class TasksService {
             path: {
                 file_id: data.fileId
             }
+        });
+    }
+    
+    /**
+     * Get Notifications
+     * @returns NotificationSchema OK
+     * @throws ApiError
+     */
+    public static getNotifications(): CancelablePromise<GetNotificationsResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/notifications'
+        });
+    }
+    
+    /**
+     * Mark All Read
+     * @returns unknown OK
+     * @throws ApiError
+     */
+    public static markAllRead(): CancelablePromise<MarkAllReadResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/notifications/mark-all-read'
         });
     }
     
