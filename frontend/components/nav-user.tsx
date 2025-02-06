@@ -3,7 +3,7 @@
 import { Bell, ChevronsUpDown, LogOut, Moon, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -18,7 +18,6 @@ import {
 import { SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar } from "@/components/ui/sidebar";
 
 import { authClient, signOut } from "@/lib/auth-client";
-
 import { NotificationCard } from "./notification-card";
 import { Skeleton } from "./ui/skeleton";
 
@@ -27,8 +26,24 @@ export function NavUser() {
   const { data: session, isPending, error } = authClient.useSession();
   const { theme, setTheme } = useTheme();
   const { isMobile } = useSidebar();
-
   const router = useRouter();
+  const notificationRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (notificationRef.current && !notificationRef.current.contains(event.target as Node)) {
+        setShowNotifications(false);
+      }
+    }
+
+    if (showNotifications) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [showNotifications]);
 
   if (isPending) return <Skeleton className="h-8 w-full" />;
   if (error) {
@@ -111,13 +126,16 @@ export function NavUser() {
         </SidebarMenuItem>
       </SidebarMenu>
 
-      {/* Modal de Notificações */}
       {showNotifications && (
         <div 
           className="fixed inset-0 flex items-center justify-center bg-black/50 backdrop-blur-sm z-50"
-          onClick={() => setShowNotifications(false)}
+          onClick={() => setShowNotifications(false)} // 🔹 Fecha ao clicar fora
         >
-          <div className="relative">
+          <div 
+            ref={notificationRef} 
+            className="relative bg-white dark:bg-gray-800 rounded-lg shadow-lg p-4"
+            onClick={(e) => e.stopPropagation()} // 🔹 Impede fechamento ao clicar dentro
+          >
             <NotificationCard />
           </div> 
         </div>

@@ -16,17 +16,15 @@ import { title } from "process";
 import { Description } from "@radix-ui/react-dialog";
 import { z } from "zod"
 import { id } from "date-fns/locale";
+import { toast } from "sonner";
 
 const NotificationSchema = z.object({
   id: z.number(),
   message: z.string(),
   created_at: z.string(),
-  title: z.string().default("Nova Notificação"),
-  description: z.string().default("Você tem uma nova notificação"),
+  title: z.string().default("Tarefa Atualizada"),
+  user: z.object({ name: z.string() }).transform((val) => val.name),
 });
-
-
-
 
 export function NotificationCard() {
 
@@ -67,7 +65,16 @@ export function NotificationCard() {
         } else if (parsedData.event === "notification") {
           const validatedNotification = NotificationSchema.safeParse(parsedData.data);
           if (validatedNotification.success) {
-            setNotifications((prev) => [validatedNotification.data, ...prev]);
+            const notification = validatedNotification.data;
+  
+            if (!notifications.some((n) => n.id === notification.id)) {
+              toast.info(`🔔 ${notification.user} atualizou "${notification.title}"`, {
+                description: notification.message,
+                duration: 5000,
+              });
+  
+              setNotifications((prev) => [notification, ...prev]);
+            }
           } else {
             console.error("Erro na validação da notificação recebida:", validatedNotification.error);
           }
@@ -107,11 +114,18 @@ export function NotificationCard() {
         {/* 🔹 Lista de Notificações */}
         {notifications.length > 0 ? (
           notifications.map((notification) => (
-            <div key={String(notification.id)} className="grid grid-cols-[25px_1fr] items-start pb-4 last:mb-0 last:pb-0">
+            <div 
+              key={String(notification.id)} 
+              className="grid grid-cols-[25px_1fr] items-start pb-4 last:mb-0 last:pb-0 cursor-pointer"
+              onClick={() => setNotifications([])} // 🔹 Fecha o card ao clicar em qualquer notificação
+            >
               <span className="flex h-2 w-2 translate-y-1 rounded-full bg-sky-500" />
               <div className="space-y-1">
                 <p className="text-sm font-medium leading-none">{notification.title}</p>
-                <p className="text-sm text-muted-foreground">{notification.description}</p>
+                <p className="text-sm text-muted-foreground">
+                  {notification.user} - {new Date(notification.created_at).toLocaleString("pt-BR")}
+                </p>
+                <p className="text-sm text-muted-foreground">{notification.message}</p>
               </div>
             </div>
           ))

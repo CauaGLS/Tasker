@@ -3,7 +3,7 @@ from django.dispatch import receiver
 from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
 
-from .models import Task, Notification  # Adicionando Notification
+from .models import Task, Notification
 from .schemas import DetailTaskSchema
 
 

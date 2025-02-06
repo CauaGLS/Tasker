@@ -45,3 +45,11 @@ next-env.d.ts
 
 # custom
 docker/*
+
+__pycache__
+db*
+.env
+env
+.venv
+.DS_Store
+venv

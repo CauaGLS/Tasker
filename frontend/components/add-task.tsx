@@ -120,7 +120,7 @@ export function AddTask() {
 
                 return await TaskServiceWrapper.uploadFile({
                   formData: { files: [file] },
-                  taskId: task.id, // ✅ Se `task.id` for undefined, o wrapper impedirá o upload
+                  taskId: task.id,
                 });
               }
               return null;

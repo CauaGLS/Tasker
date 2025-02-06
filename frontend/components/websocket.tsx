@@ -5,20 +5,29 @@ import { TaskSchema } from "@/services/types.gen";
 import { useQueryClient } from "@tanstack/react-query";
 import { DetailTaskSchema } from "@/services/types.gen";
 import { toast } from "sonner";
+import { useState } from "react";
 
 export function Websocket() {
   const queryClient = useQueryClient();
+  const [unreadCount, setUnreadCount] = useState(0);
 
   useWebSocket({
     onMessage: (data) => {
-      const { event, task, message } = JSON.parse(data.data);
+      const { event, task, notifications } = JSON.parse(data.data);
 
       if (event === "task:created") {
         handleTaskCreated(task);
       } else if (event === "task:updated") {
         handleTaskUpdated(task);
+      } else if (event === "notification_list") {
+        setUnreadCount(notifications.length);
+        showUnreadToast(notifications.length);
       } else if (event === "notification") {
-        showNotification(message);
+        setUnreadCount((prev) => {
+          const newCount = prev + 1;
+          showUnreadToast(newCount);
+          return newCount;
+        });
       }
     },
   });
@@ -40,8 +49,12 @@ export function Websocket() {
     }
   }
 
-  function showNotification(message: string) {
-    toast.info("Nova notificação 🔔",  { description: message });
+  function showUnreadToast(count: number) {
+    if (count > 0) {
+      toast.info(`🔔 Você possui ${count} novas notificações!`, {
+        duration: 5000,
+      });
+    }
   }
 
   return null;
