@@ -172,7 +172,7 @@ export function AddTask() {
   const deleteTask = useMutation({
     mutationFn: TasksService.deleteTask,
     onSuccess: async () => {
-      toast.success("Tarefa arquivada", {
+      toast.warning("Tarefa Arquivada 📂", {
         description: task?.title,
         action: {
           label: "Restaurar",

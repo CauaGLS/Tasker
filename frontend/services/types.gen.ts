@@ -140,4 +140,6 @@ export type DeleteFileResponse = (void);
 
 export type GetNotificationsResponse = (Array<NotificationSchema>);
 
+export type GetUnreadCountResponse = (number);
+
 export type MarkAllReadResponse = (unknown);

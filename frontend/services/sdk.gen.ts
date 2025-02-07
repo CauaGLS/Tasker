@@ -3,7 +3,7 @@
 import type { CancelablePromise } from './core/CancelablePromise';
 import { OpenAPI } from './core/OpenAPI';
 import { request as __request } from './core/request';
-import type { GetTasksResponse, CreateTaskData, CreateTaskResponse, GetArchivedTasksResponse, GetTaskData, GetTaskResponse, UpdateTaskData, UpdateTaskResponse, DeleteTaskData, DeleteTaskResponse, ForceDeleteTaskData, ForceDeleteTaskResponse, RestoreTaskData, RestoreTaskResponse, UploadFileData, UploadFileResponse, DeleteFileData, DeleteFileResponse, GetNotificationsResponse, MarkAllReadResponse } from './types.gen';
+import type { GetTasksResponse, CreateTaskData, CreateTaskResponse, GetArchivedTasksResponse, GetTaskData, GetTaskResponse, UpdateTaskData, UpdateTaskResponse, DeleteTaskData, DeleteTaskResponse, ForceDeleteTaskData, ForceDeleteTaskResponse, RestoreTaskData, RestoreTaskResponse, UploadFileData, UploadFileResponse, DeleteFileData, DeleteFileResponse, GetNotificationsResponse, GetUnreadCountResponse, MarkAllReadResponse } from './types.gen';
 
 export class TasksService {
     /**
@@ -180,6 +180,18 @@ export class TasksService {
         return __request(OpenAPI, {
             method: 'GET',
             url: '/api/notifications'
+        });
+    }
+    
+    /**
+     * Get Unread Count
+     * @returns number OK
+     * @throws ApiError
+     */
+    public static getUnreadCount(): CancelablePromise<GetUnreadCountResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/notifications/unread-count'
         });
     }
     

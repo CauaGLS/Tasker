@@ -5,56 +5,52 @@ import { TaskSchema } from "@/services/types.gen";
 import { useQueryClient } from "@tanstack/react-query";
 import { DetailTaskSchema } from "@/services/types.gen";
 import { toast } from "sonner";
-import { useState } from "react";
 
 export function Websocket() {
   const queryClient = useQueryClient();
-  const [unreadCount, setUnreadCount] = useState(0);
 
   useWebSocket({
     onMessage: (data) => {
-      const { event, task, notifications } = JSON.parse(data.data);
+      const parsedData = JSON.parse(data.data);
+      const { event, task, message } = parsedData; // 🔹 Agora pegamos `message` do backend
 
       if (event === "task:created") {
-        handleTaskCreated(task);
+        handleTaskCreated(task, message);
       } else if (event === "task:updated") {
-        handleTaskUpdated(task);
-      } else if (event === "notification_list") {
-        setUnreadCount(notifications.length);
-        showUnreadToast(notifications.length);
-      } else if (event === "notification") {
-        setUnreadCount((prev) => {
-          const newCount = prev + 1;
-          showUnreadToast(newCount);
-          return newCount;
-        });
+        handleTaskUpdated(task, message);
+      } else if (event === "task:archived") {
+        handleTaskArchived(task, message);
       }
     },
   });
 
-  async function handleTaskCreated(task: TaskSchema) {
+  async function handleTaskCreated(task: TaskSchema, message: string) {
     await queryClient.invalidateQueries({ queryKey: ["tasks"] });
     queryClient.setQueryData(["tasks", task.id], task);
+
+    toast.success(`Tarefa Criada ✅`, {
+      description: message, // 🔹 Agora a mensagem vem do backend
+    });
   }
 
-  async function handleTaskUpdated(task: DetailTaskSchema) {
+  async function handleTaskUpdated(task: DetailTaskSchema, message: string) {
     await queryClient.invalidateQueries({ queryKey: ["tasks"] });
-  
+
     queryClient.setQueryData(["tasks", task.id], (oldData: DetailTaskSchema | undefined) => {
       return oldData ? { ...oldData, ...task } : task;
     });
-  
-    if (task.deleted_at) {
-      await queryClient.invalidateQueries({ queryKey: ["tasks-archive"] });
-    }
+
+    toast.info(`Tarefa Atualizada ✏️`, {
+      description: message, // 🔹 Agora a mensagem vem do backend
+    });
   }
 
-  function showUnreadToast(count: number) {
-    if (count > 0) {
-      toast.info(`🔔 Você possui ${count} novas notificações!`, {
-        duration: 5000,
-      });
-    }
+  async function handleTaskArchived(task: DetailTaskSchema, message: string) {
+    await queryClient.invalidateQueries({ queryKey: ["tasks"] });
+
+    queryClient.setQueryData(["tasks", task.id], (oldData: DetailTaskSchema | undefined) => {
+      return oldData ? { ...oldData, ...task } : task;
+    });
   }
 
   return null;

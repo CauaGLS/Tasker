@@ -16,15 +16,24 @@ def task_post_save(sender, instance: Task, created: bool, **kwargs):
     group_name = "all"
     channel_layer = get_channel_layer()
 
-    event = "task:created" if created else "task:updated"
+    if created:
+        event = "task:created"
+        message = f"{instance.created_by.name} criou a tarefa '{instance.title}'"
+    elif instance.deleted_at:
+        event = "task:archived"
+        message = f"{instance.created_by.name} arquivou a tarefa '{instance.title}'"
+    else:
+        event = "task:updated"
+        message = f"{instance.created_by.name} atualizou a tarefa '{instance.title}'"
 
     Notification.objects.create(
         user=instance.created_by,
         task=instance,
-        message=f"Tarefa '{instance.title}' foi {'criada' if created else 'atualizada'}"
+        message=message
     )
 
     async_to_sync(channel_layer.group_send)(
         group_name,
-        {"type": "send.broadcast", "data": {"event": event, "task": task}},
+        {"type": "send.broadcast", "data": {"event": event, "task": task, "message": message}},
     )
+

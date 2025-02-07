@@ -76,8 +76,8 @@ def delete_task(request, task_id: int):
 @router.delete("/tasks/{task_id}/force", response={204: None})
 def force_delete_task(request, task_id: int):
     task = get_object_or_404(Task, id=task_id)
+    Notification.objects.filter(task=task).delete()
     task.delete()
-    task.save()
 
     return 204, None
 
@@ -123,7 +123,13 @@ def get_notifications(request):
     return Notification.objects.filter(user=request.auth, is_read=False).order_by("-created_at")
 
 
+@router.get("/notifications/unread-count", response=int)
+def get_unread_count(request):
+    return Notification.objects.filter(user=request.auth, is_read=False).count()
+
+
 @router.post("/notifications/mark-all-read", response={200: None})
 def mark_all_read(request):
-    return Notification.objects.filter(user=request.auth, is_read=False).update(is_read=True)
+    Notification.objects.filter(user=request.auth, is_read=False).update(is_read=True)
+    return 200, None
     
