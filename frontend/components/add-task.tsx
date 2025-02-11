@@ -2,11 +2,10 @@
 
 import { TaskStatus, TasksService } from "@/services";
 import { DetailTaskSchema } from "@/services";
-import { TaskServiceWrapper } from "@/lib/task-service-wrapper";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { TagInput } from "emblor";
-import { ArchiveIcon, Loader2, PlusIcon, TagIcon, Trash2Icon } from "lucide-react";
+import { ArchiveIcon, Loader2, Loader2Icon, PlusIcon, TagIcon, Trash2Icon } from "lucide-react";
 import { UploadCloudIcon } from "lucide-react";
 import { parseAsInteger, useQueryState } from "nuqs";
 import { useCallback, useEffect, useState } from "react";
@@ -31,6 +30,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 
 import { useSession } from "@/lib/auth-client";
 import { STATUS } from "@/lib/labels";
+import { TaskServiceWrapper } from "@/lib/task-service-wrapper";
 import { formatDatetime } from "@/lib/utils";
 
 import { MinimalTiptapEditor } from "./minimal-tiptap";
@@ -94,7 +94,10 @@ export function AddTask() {
         description: task.description,
         expected_date: task.expected_date ? new Date(task.expected_date) : null,
         tags: Array.isArray(task.tags) ? task.tags.map((tag) => ({ id: tag, text: tag })) : [],
-        file: Array.isArray(task.medias) && task.medias.length > 0 ? task.medias.map((media) => ({ id: media.id, src: media.file })) : [],
+        file:
+          Array.isArray(task.medias) && task.medias.length > 0
+            ? task.medias.map((media) => ({ id: media.id, src: media.file }))
+            : [],
       });
     }
   }, [task, taskId, form]);
@@ -393,6 +396,7 @@ export function AddTask() {
                 control={form.control}
                 name="file"
                 render={({ field }) => {
+                  const [fileUploaded, setFileUploaded] = useState(false);
                   const [preview, setPreview] = useState<string | null>(null);
                   const [fileName, setFileName] = useState<string | null>(null);
 
@@ -459,7 +463,46 @@ export function AddTask() {
 
                   // Configuração do Dropzone
                   const { getRootProps, getInputProps, isDragActive } = useDropzone({
-                    onDrop,
+                    onDrop: async (acceptedFiles: File[]) => {
+                      if (acceptedFiles.length === 0) return;
+
+                      const taskIdValue = taskId || (task ? task.id : undefined);
+                      if (!taskIdValue) {
+                        toast.error("Erro: Tarefa precisa ser criada antes do upload.");
+                        return;
+                      }
+
+                      try {
+                        setFileUploaded(true); // 🔹 Ativa o estado de que um arquivo foi recebido
+                        toast.info("Arquivo recebido. Salve as alterações para visualizar!");
+
+                        // Faz o upload real do arquivo
+                        const uploadedFiles = await Promise.all(
+                          acceptedFiles.map(async (file) => {
+                            const formData = new FormData();
+                            formData.append("files", file);
+                            return await TaskServiceWrapper.uploadFile({
+                              formData: { files: [file] },
+                              taskId: taskIdValue !== 0 ? taskIdValue : undefined,
+                            });
+                          }),
+                        );
+
+                        form.setValue(
+                          "file",
+                          [
+                            ...form.getValues("file"),
+                            ...uploadedFiles.flat().map((file) => ({ id: file.id, src: file.file })),
+                          ],
+                          { shouldDirty: true }, // Marca o formulário como modificado
+                        );
+
+                        toast.success("Arquivo enviado com sucesso!");
+                      } catch (error) {
+                        console.error("Erro ao enviar arquivo:", error);
+                        toast.error("Falha no upload do arquivo.");
+                      }
+                    },
                     multiple: false,
                     accept: {
                       "image/*": [".png", ".jpg", ".jpeg", ".gif", ".webp"],
@@ -478,14 +521,24 @@ export function AddTask() {
                         <FormControl>
                           <div
                             {...getRootProps()}
-                            className={`cursor-pointer rounded-lg border-2 border-dashed p-4 text-center ${
-                              isDragActive ? "border-gray-500 bg-gray-100" : "border-gray-300"
+                            className={`cursor-pointer rounded-lg border-2 p-4 text-center transition-all ${
+                              isDragActive ? "border-gray-500 bg-gray-100" : "border-gray-700"
                             }`}
                           >
                             <input {...getInputProps()} />
-                            <UploadCloudIcon className="mx-auto h-10 w-10 text-gray-400" />
+
+                            {/* 🔹 Ícone muda quando um arquivo é recebido */}
+                            {fileUploaded ? (
+                              <Loader2Icon className="mx-auto h-10 w-10 animate-spin text-gray-400" />
+                            ) : (
+                              <UploadCloudIcon className="mx-auto h-10 w-10 text-gray-400" />
+                            )}
+
+                            {/* 🔹 Mensagem dinâmica */}
                             <p className="text-gray-600">
-                              Arraste e solte um arquivo aqui ou clique para selecionar
+                              {fileUploaded
+                                ? "Arquivo recebido! Salve a tarefa para visualizar."
+                                : "Arraste e solte um arquivo aqui ou clique para selecionar"}
                             </p>
                           </div>
                         </FormControl>
@@ -502,7 +555,7 @@ export function AddTask() {
                             />
                           </a>
                           <Button
-                            className="absolute top-0 right-0"
+                            className="absolute right-0 top-0"
                             type="button"
                             variant="destructive"
                             size="icon"
@@ -552,7 +605,7 @@ export function AddTask() {
                             {fileName}
                           </a>
                           <Button
-                            className="absolute top-0 right-0"
+                            className="absolute right-0 top-0"
                             type="button"
                             variant="destructive"
                             size="icon"
