@@ -357,7 +357,7 @@ export function AddTask() {
                         styleClasses={{
                           inlineTagsContainer: "border-none min-h-12",
                           tag: {
-                            body: "pl-3",
+                            body: "pl-3 bg-orange-600",
                           },
                         }}
                       />
@@ -659,8 +659,7 @@ export function AddTask() {
                 </Button>
               )}
               <Button
-                className="ml-auto"
-                variant="brand"
+                className="ml-auto bg-orange-600 text-white"
                 disabled={isPending || (!form.formState.isDirty && !taskId)}
               >
                 {isPending ? <Loader2 className="size-4 animate-spin" /> : taskId ? "Salvar" : "Criar"}

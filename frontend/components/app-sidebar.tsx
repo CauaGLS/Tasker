@@ -1,7 +1,7 @@
 "use client";
 
 import Logo from "@/public/logo.svg";
-import { ArchiveIcon, LayoutDashboard } from "lucide-react";
+import { ArchiveIcon, SquareCheckBig } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -26,7 +26,7 @@ const links = [
   {
     title: "Tarefas",
     url: "/",
-    icon: LayoutDashboard,
+    icon: SquareCheckBig,
   },
 ];
 

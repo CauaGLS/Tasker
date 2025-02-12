@@ -14,6 +14,20 @@ export const columns: ColumnDef<TaskSchema>[] = [
     cell: ({ row }) => <div className="max-w-[200px] truncate lg:max-w-[400px]">{row.getValue("title")}</div>,
   },
   {
+    accessorKey: "tags",
+    header: ({ column }) => (
+      <DataTableColumnHeader className="justify-center" column={column} title="Tags" />
+    ),
+    cell: ({ row }) => 
+    <div className="text-center">
+      {(row.getValue("tags") as string[]).map((tag) => (
+        <span key={tag} className="text-xs bg-purple-800 text-white rounded-full px-2 py-0.5 mr-1">
+          {tag}
+        </span>
+      ))}
+    </div>,
+  },
+  {
     accessorKey: "status",
     header: ({ column }) => (
       <DataTableColumnHeader className="justify-center" column={column} title="Status" />
