@@ -1,0 +1,85 @@
+## Render Blueprint for the Tasker backend.
+##
+## Simplified deploy mode: only a web service + a free Postgres database are
+## provisioned. No Redis service and no separate Celery worker/beat services
+## are required — see core/settings.py, which falls back to Celery eager
+## execution and Django Channels' in-memory layer when REDIS_URL is unset.
+## This is a deliberate choice for the first deploy, not an oversight: add a
+## Redis instance and worker/beat services later if real background tasks or
+## multi-instance WebSocket broadcasting become necessary.
+##
+## Deploy with the Render "Blueprint" flow (New + Blueprint, point it at this
+## repo). Docs: https://render.com/docs/blueprint-spec
+
+databases:
+  - name: tasker-db
+    plan: free
+    databaseName: tasker
+    user: tasker
+
+services:
+  - type: web
+    name: tasker-backend
+    runtime: python
+    plan: free
+    rootDir: backend
+    # Render's Python runtime doesn't have uv preinstalled, so we install it
+    # first and use it to install the exact versions from uv.lock. If you'd
+    # rather not depend on uv at deploy time, swap this for:
+    #   pip install -r requirements.txt
+    buildCommand: >-
+      pip install uv &&
+      uv sync --frozen --no-dev &&
+      uv run python manage.py collectstatic --noinput &&
+      uv run python manage.py migrate
+    startCommand: uv run daphne -p $PORT --bind 0.0.0.0 core.asgi:application
+    healthCheckPath: /admin/login/
+    envVars:
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DEBUG
+        value: "False"
+      - key: ALLOWED_HOSTS
+        sync: false # e.g. tasker-backend.onrender.com
+      - key: CORS_ALLOWED_ORIGINS
+        sync: false # e.g. https://tasker.vercel.app
+      - key: TIME_ZONE
+        value: America/Sao_Paulo
+      - key: POSTGRES_DB
+        fromDatabase:
+          name: tasker-db
+          property: database
+      - key: POSTGRES_USER
+        fromDatabase:
+          name: tasker-db
+          property: user
+      - key: POSTGRES_PASSWORD
+        fromDatabase:
+          name: tasker-db
+          property: password
+      - key: POSTGRES_HOST
+        fromDatabase:
+          name: tasker-db
+          property: host
+      - key: POSTGRES_PORT
+        fromDatabase:
+          name: tasker-db
+          property: port
+      # Intentionally left unset: no Redis service in this blueprint, so the
+      # app boots in simplified mode (eager Celery + in-memory Channels).
+      - key: REDIS_URL
+        sync: false
+      # Optional: object storage (S3-compatible) for uploaded media.
+      - key: AWS_STORAGE_BUCKET_NAME
+        sync: false
+      - key: AWS_ACCESS_KEY_ID
+        sync: false
+      - key: AWS_SECRET_ACCESS_KEY
+        sync: false
+      - key: AWS_S3_ENDPOINT_URL
+        sync: false
+      - key: AWS_S3_SIGNATURE_VERSION
+        sync: false
+      # Optional: error tracking.
+      - key: SENTRY_DSN
+        sync: false

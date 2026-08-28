@@ -40,6 +40,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -86,7 +87,7 @@ DATABASES = {
     }
 }
 
-REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+REDIS_URL = os.getenv("REDIS_URL")
 
 # Password validation
 # https://docs.djangoproject.com/en/5.1/ref/settings/#auth-password-validators
@@ -124,46 +125,90 @@ USE_TZ = True
 
 STATIC_URL = "static/"
 
+STATIC_ROOT = BASE_DIR / "staticfiles"
+
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # CORS
+#
+# CORS_ALLOWED_ORIGINS is a comma-separated list of allowed origins (e.g. the
+# Vercel frontend URL). When unset, all origins are allowed, which is fine
+# for local development but should be restricted in production.
 
-CORS_ALLOW_ALL_ORIGINS = True
+_cors_allowed_origins = os.getenv("CORS_ALLOWED_ORIGINS")
+
+if _cors_allowed_origins:
+    CORS_ALLOW_ALL_ORIGINS = False
+    CORS_ALLOWED_ORIGINS = [origin.strip() for origin in _cors_allowed_origins.split(",") if origin.strip()]
+else:
+    CORS_ALLOW_ALL_ORIGINS = True
 
 CORS_ALLOW_CREDENTIALS = True
 
 # Celery
+#
+# Simplified deploy mode: when no REDIS_URL/CELERY_BROKER_URL is configured
+# there is no broker and no separate worker process available, so tasks
+# run eagerly (synchronously, in-process) instead of via `.delay()` on a
+# worker. This lets the app boot and behave correctly without Celery/Redis
+# infrastructure. Set REDIS_URL to opt back into real async task execution.
 
 CELERY_TIMEZONE = TIME_ZONE
 
-CELERY_BROKER_URL = REDIS_URL
+CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", REDIS_URL)
+
+CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", REDIS_URL)
 
 CELERY_TASK_TIME_LIMIT = 30 * 60
 
 CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
 
-CACHES = {
-    "default": {
-        "BACKEND": "django.core.cache.backends.redis.RedisCache",
-        "LOCATION": REDIS_URL,
-    },
-}
+if not CELERY_BROKER_URL:
+    CELERY_TASK_ALWAYS_EAGER = True
+    CELERY_TASK_EAGER_PROPAGATES = True
+
+if REDIS_URL:
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.redis.RedisCache",
+            "LOCATION": REDIS_URL,
+        },
+    }
+else:
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+        },
+    }
 
 
 # Channels
 # https://channels.readthedocs.io/en/latest/index.html
+#
+# Simplified deploy mode: without REDIS_URL, fall back to the in-memory
+# channel layer. It works fine for a single-process deployment (this app
+# serves HTTP and WebSocket from the same Daphne process) but does not
+# broadcast across multiple processes/instances. Set REDIS_URL to use
+# channels_redis for multi-process/multi-instance realtime.
 
-CHANNEL_LAYERS = {
-    "default": {
-        "BACKEND": "channels_redis.pubsub.RedisPubSubChannelLayer",
-        "CONFIG": {
-            "hosts": [REDIS_URL],
+if REDIS_URL:
+    CHANNEL_LAYERS = {
+        "default": {
+            "BACKEND": "channels_redis.pubsub.RedisPubSubChannelLayer",
+            "CONFIG": {
+                "hosts": [REDIS_URL],
+            },
         },
-    },
-}
+    }
+else:
+    CHANNEL_LAYERS = {
+        "default": {
+            "BACKEND": "channels.layers.InMemoryChannelLayer",
+        },
+    }
 
 # Storage
 # https://django-storages.readthedocs.io/en/latest/backends/amazon-S3.html
@@ -174,7 +219,7 @@ STORAGES = {
         "OPTIONS": {},
     },
     "staticfiles": {
-        "BACKEND": "django.core.files.storage.StaticFilesStorage",
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
     },
 }
 

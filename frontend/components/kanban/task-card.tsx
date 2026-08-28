@@ -15,6 +15,11 @@ type TaskCardProps = {
   isOverlay?: boolean;
 };
 
+export type TaskDragData = {
+  type: "Task";
+  task: TaskSchema;
+};
+
 export const TaskCard = memo(({ task, isOverlay }: TaskCardProps) => {
   const [_, setTaskId] = useQueryState("t");
 
@@ -23,7 +28,7 @@ export const TaskCard = memo(({ task, isOverlay }: TaskCardProps) => {
     data: {
       type: "Task",
       task,
-    },
+    } satisfies TaskDragData,
     attributes: {
       roleDescription: "Task",
     },

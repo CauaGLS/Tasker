@@ -9,3 +9,10 @@ celerybeat*
 
 # Virtual environments
 .venv
+
+# Env files
+.env
+!.env.example
+
+# Collected static files (whitenoise)
+/staticfiles/
