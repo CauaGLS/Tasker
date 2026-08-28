@@ -11,6 +11,7 @@ import { parseAsInteger, useQueryState } from "nuqs";
 import { useCallback, useEffect, useState } from "react";
 import { useDropzone } from "react-dropzone";
 import { useForm } from "react-hook-form";
+import type { ControllerRenderProps, UseFormReturn } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
 
@@ -59,6 +60,231 @@ const formSchema = z.object({
 });
 
 type FormSchema = z.infer<typeof formSchema>;
+
+// Extraído como componente próprio porque hooks (useState/useEffect/useMutation/
+// useDropzone) não podem ser chamados dentro do callback `render` de um Controller
+// do react-hook-form — esse callback não é uma instância de componente estável
+// para o React, então os hooks quebravam as Regras dos Hooks (bug real, não só lint).
+function FileUploadField({
+  field,
+  task,
+  taskId,
+  form,
+  queryClient,
+}: {
+  field: ControllerRenderProps<FormSchema, "file">;
+  task: DetailTaskSchema | undefined;
+  taskId: number | null;
+  form: UseFormReturn<FormSchema>;
+  queryClient: ReturnType<typeof useQueryClient>;
+}) {
+  const [fileUploaded, setFileUploaded] = useState(false);
+  const [preview, setPreview] = useState<string | null>(null);
+  const [fileName, setFileName] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (task && Array.isArray(task.medias) && task.medias.length > 0) {
+      setPreview(task.medias[0].file);
+      setFileName(task.medias[0].name ?? null);
+    }
+  }, [task]);
+
+  const deleteFileMutation = useMutation({
+    mutationFn: async (fileId: number) => {
+      console.log("Excluindo arquivo do backend. ID:", fileId);
+      return await TasksService.deleteFile({ fileId });
+    },
+    onSuccess: () => {
+      toast.success("Arquivo removido com sucesso!");
+      queryClient.invalidateQueries({ queryKey: ["tasks", Number(taskId)] }); // ✅ Atualiza a task no cache
+    },
+    onError: () => {
+      toast.error("Erro ao remover arquivo.");
+    },
+  });
+
+  // Configuração do Dropzone
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    onDrop: async (acceptedFiles: File[]) => {
+      if (acceptedFiles.length === 0) return;
+
+      const taskIdValue = taskId || (task ? task.id : undefined);
+      if (!taskIdValue) {
+        toast.error("Erro: Tarefa precisa ser criada antes do upload.");
+        return;
+      }
+
+      try {
+        setFileUploaded(true); // 🔹 Ativa o estado de que um arquivo foi recebido
+        toast.info("Arquivo recebido. Salve as alterações para visualizar!");
+
+        // Faz o upload real do arquivo
+        const uploadedFiles = await Promise.all(
+          acceptedFiles.map(async (file) => {
+            const formData = new FormData();
+            formData.append("files", file);
+            return await TaskServiceWrapper.uploadFile({
+              formData: { files: [file] },
+              taskId: taskIdValue !== 0 ? taskIdValue : undefined,
+            });
+          }),
+        );
+
+        form.setValue(
+          "file",
+          [
+            ...form.getValues("file"),
+            ...uploadedFiles.flat().map((file) => ({ id: file.id, src: file.file })),
+          ],
+          { shouldDirty: true }, // Marca o formulário como modificado
+        );
+
+        toast.success("Arquivo enviado com sucesso!");
+      } catch (error) {
+        console.error("Erro ao enviar arquivo:", error);
+        toast.error("Falha no upload do arquivo.");
+      }
+    },
+    multiple: false,
+    accept: {
+      "image/*": [".png", ".jpg", ".jpeg", ".gif", ".webp"],
+      "application/pdf": [".pdf"],
+      "application/msword": [".doc", ".docx"],
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [".xls", ".xlsx"],
+      "text/plain": [".txt"],
+    },
+  });
+
+  return (
+    <FormItem className="flex flex-col gap-2">
+      <FormLabel>Carregar Arquivo</FormLabel>
+
+      {!preview && !fileName && (
+        <FormControl>
+          <div
+            {...getRootProps()}
+            className={`cursor-pointer rounded-lg border-2 p-4 text-center transition-all ${
+              isDragActive ? "border-gray-500 bg-gray-100" : "border-gray-700"
+            }`}
+          >
+            <input {...getInputProps()} />
+
+            {/* 🔹 Ícone muda quando um arquivo é recebido */}
+            {fileUploaded ? (
+              <Loader2Icon className="mx-auto h-10 w-10 animate-spin text-gray-400" />
+            ) : (
+              <UploadCloudIcon className="mx-auto h-10 w-10 text-gray-400" />
+            )}
+
+            {/* 🔹 Mensagem dinâmica */}
+            <p className="text-gray-600">
+              {fileUploaded
+                ? "Arquivo recebido! Salve a tarefa para visualizar."
+                : "Arraste e solte um arquivo aqui ou clique para selecionar"}
+            </p>
+          </div>
+        </FormControl>
+      )}
+
+      {/* Exibir o preview da imagem com link para tela cheia */}
+      {preview && (
+        <div className="group relative flex h-full min-h-[100px] w-full flex-row items-start justify-center overflow-hidden rounded-md md:min-h-[200px]">
+          <a>
+            <img
+              src={preview}
+              alt="Pré-visualização"
+              className="h-32 w-auto cursor-pointer rounded-md shadow"
+            />
+          </a>
+          <Button
+            className="absolute right-0 top-0"
+            type="button"
+            variant="destructive"
+            size="icon"
+            onClick={() => {
+              if (Array.isArray(field.value)) {
+                const fileToDelete = field.value.find(
+                  (f) => typeof f === "object" && "id" in f,
+                );
+                if (fileToDelete && fileToDelete.id) {
+                  deleteFileMutation.mutate(fileToDelete.id); // ✅ Agora chamamos o backend para excluir o arquivo real
+                }
+              }
+
+              setPreview(null);
+              setFileName(null);
+              field.onChange(
+                (field.value ?? []).filter((f) => {
+                  if (f instanceof File) {
+                    return f.name !== fileName; // ✅ Compara arquivos temporários pelo nome
+                  }
+                  if (typeof f === "object" && "src" in f) {
+                    return f.src !== preview; // ✅ Compara arquivos salvos pela URL
+                  }
+                  return true;
+                }),
+              );
+            }}
+          >
+            <Trash2Icon className="size-4" />
+          </Button>
+        </div>
+      )}
+
+      {/* Exibir o nome do arquivo com link para tela cheia para arquivos não visuais */}
+      {fileName && !preview && (
+        <div className="flex items-center justify-between rounded-md border p-2">
+          <a
+            href={
+              field.value && typeof field.value === "object" && "src" in field.value
+                ? (field.value as { src: string }).src
+                : undefined
+            }
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-sm text-blue-600 underline"
+          >
+            {fileName}
+          </a>
+          <Button
+            className="absolute right-0 top-0"
+            type="button"
+            variant="destructive"
+            size="icon"
+            onClick={() => {
+              if (Array.isArray(field.value)) {
+                const fileToDelete = field.value.find(
+                  (f) => typeof f === "object" && "id" in f,
+                );
+                if (fileToDelete && fileToDelete.id) {
+                  deleteFileMutation.mutate(fileToDelete.id); // ✅ Agora chamamos o backend para excluir o arquivo real
+                }
+              }
+
+              setPreview(null);
+              setFileName(null);
+              field.onChange(
+                (field.value ?? []).filter((f) => {
+                  if (f instanceof File) {
+                    return f.name !== fileName; // ✅ Compara arquivos temporários pelo nome
+                  }
+                  if (typeof f === "object" && "src" in f) {
+                    return f.src !== preview; // ✅ Compara arquivos salvos pela URL
+                  }
+                  return true;
+                }),
+              );
+            }}
+          >
+            <Trash2Icon className="size-4" />
+          </Button>
+        </div>
+      )}
+
+      <FormMessage />
+    </FormItem>
+  );
+}
 
 export function AddTask() {
   const { data: session } = useSession();
@@ -395,254 +621,15 @@ export function AddTask() {
               <FormField
                 control={form.control}
                 name="file"
-                render={({ field }) => {
-                  const [fileUploaded, setFileUploaded] = useState(false);
-                  const [preview, setPreview] = useState<string | null>(null);
-                  const [fileName, setFileName] = useState<string | null>(null);
-
-                  useEffect(() => {
-                    if (task && Array.isArray(task.medias) && task.medias.length > 0) {
-                      setPreview(task.medias[0].file);
-                      setFileName(task.medias[0].name ?? null);
-                    }
-                  }, [task]);
-
-                  const deleteFileMutation = useMutation({
-                    mutationFn: async (fileId: number) => {
-                      console.log("Excluindo arquivo do backend. ID:", fileId);
-                      return await TasksService.deleteFile({ fileId });
-                    },
-                    onSuccess: () => {
-                      toast.success("Arquivo removido com sucesso!");
-                      queryClient.invalidateQueries({ queryKey: ["tasks", Number(taskId)] }); // ✅ Atualiza a task no cache
-                    },
-                    onError: () => {
-                      toast.error("Erro ao remover arquivo.");
-                    },
-                  });
-
-                  // Callback para processar o arquivo quando ele for dropado
-                  const onDrop = async (acceptedFiles: File[]) => {
-                    if (acceptedFiles.length === 0) return;
-
-                    const taskIdValue = taskId || (task ? task.id : undefined);
-                    if (!taskIdValue) {
-                      toast.error("Erro: Tarefa precisa ser criada antes do upload.");
-                      return;
-                    }
-
-                    try {
-                      toast.info("Enviando arquivos...");
-
-                      const uploadedFiles = await Promise.all(
-                        acceptedFiles.map(async (file) => {
-                          const formData = new FormData();
-                          formData.append("files", file);
-                          return await TaskServiceWrapper.uploadFile({
-                            formData: { files: [file] },
-                            taskId: taskIdValue !== 0 ? taskIdValue : undefined, // Se for 0, não enviar
-                          });
-                        }),
-                      );
-
-                      form.setValue(
-                        "file",
-                        [
-                          ...form.getValues("file"),
-                          ...uploadedFiles.flat().map((file) => ({ id: file.id, src: file.file })),
-                        ],
-                        { shouldDirty: true }, // Marca o formulário como modificado
-                      );
-
-                      toast.success("Arquivos enviados com sucesso!");
-                    } catch (error) {
-                      console.error("Erro ao enviar arquivos:", error);
-                      toast.error("Falha no upload dos arquivos.");
-                    }
-                  };
-
-                  // Configuração do Dropzone
-                  const { getRootProps, getInputProps, isDragActive } = useDropzone({
-                    onDrop: async (acceptedFiles: File[]) => {
-                      if (acceptedFiles.length === 0) return;
-
-                      const taskIdValue = taskId || (task ? task.id : undefined);
-                      if (!taskIdValue) {
-                        toast.error("Erro: Tarefa precisa ser criada antes do upload.");
-                        return;
-                      }
-
-                      try {
-                        setFileUploaded(true); // 🔹 Ativa o estado de que um arquivo foi recebido
-                        toast.info("Arquivo recebido. Salve as alterações para visualizar!");
-
-                        // Faz o upload real do arquivo
-                        const uploadedFiles = await Promise.all(
-                          acceptedFiles.map(async (file) => {
-                            const formData = new FormData();
-                            formData.append("files", file);
-                            return await TaskServiceWrapper.uploadFile({
-                              formData: { files: [file] },
-                              taskId: taskIdValue !== 0 ? taskIdValue : undefined,
-                            });
-                          }),
-                        );
-
-                        form.setValue(
-                          "file",
-                          [
-                            ...form.getValues("file"),
-                            ...uploadedFiles.flat().map((file) => ({ id: file.id, src: file.file })),
-                          ],
-                          { shouldDirty: true }, // Marca o formulário como modificado
-                        );
-
-                        toast.success("Arquivo enviado com sucesso!");
-                      } catch (error) {
-                        console.error("Erro ao enviar arquivo:", error);
-                        toast.error("Falha no upload do arquivo.");
-                      }
-                    },
-                    multiple: false,
-                    accept: {
-                      "image/*": [".png", ".jpg", ".jpeg", ".gif", ".webp"],
-                      "application/pdf": [".pdf"],
-                      "application/msword": [".doc", ".docx"],
-                      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [".xls", ".xlsx"],
-                      "text/plain": [".txt"],
-                    },
-                  });
-
-                  return (
-                    <FormItem className="flex flex-col gap-2">
-                      <FormLabel>Carregar Arquivo</FormLabel>
-
-                      {!preview && !fileName && (
-                        <FormControl>
-                          <div
-                            {...getRootProps()}
-                            className={`cursor-pointer rounded-lg border-2 p-4 text-center transition-all ${
-                              isDragActive ? "border-gray-500 bg-gray-100" : "border-gray-700"
-                            }`}
-                          >
-                            <input {...getInputProps()} />
-
-                            {/* 🔹 Ícone muda quando um arquivo é recebido */}
-                            {fileUploaded ? (
-                              <Loader2Icon className="mx-auto h-10 w-10 animate-spin text-gray-400" />
-                            ) : (
-                              <UploadCloudIcon className="mx-auto h-10 w-10 text-gray-400" />
-                            )}
-
-                            {/* 🔹 Mensagem dinâmica */}
-                            <p className="text-gray-600">
-                              {fileUploaded
-                                ? "Arquivo recebido! Salve a tarefa para visualizar."
-                                : "Arraste e solte um arquivo aqui ou clique para selecionar"}
-                            </p>
-                          </div>
-                        </FormControl>
-                      )}
-
-                      {/* Exibir o preview da imagem com link para tela cheia */}
-                      {preview && (
-                        <div className="group relative flex h-full min-h-[100px] w-full flex-row items-start justify-center overflow-hidden rounded-md md:min-h-[200px]">
-                          <a>
-                            <img
-                              src={preview}
-                              alt="Pré-visualização"
-                              className="h-32 w-auto cursor-pointer rounded-md shadow"
-                            />
-                          </a>
-                          <Button
-                            className="absolute right-0 top-0"
-                            type="button"
-                            variant="destructive"
-                            size="icon"
-                            onClick={() => {
-                              if (Array.isArray(field.value)) {
-                                const fileToDelete = field.value.find(
-                                  (f) => typeof f === "object" && "id" in f,
-                                );
-                                if (fileToDelete && fileToDelete.id) {
-                                  deleteFileMutation.mutate(fileToDelete.id); // ✅ Agora chamamos o backend para excluir o arquivo real
-                                }
-                              }
-
-                              setPreview(null);
-                              setFileName(null);
-                              field.onChange(
-                                (field.value ?? []).filter((f) => {
-                                  if (f instanceof File) {
-                                    return f.name !== fileName; // ✅ Compara arquivos temporários pelo nome
-                                  }
-                                  if (typeof f === "object" && "src" in f) {
-                                    return f.src !== preview; // ✅ Compara arquivos salvos pela URL
-                                  }
-                                  return true;
-                                }),
-                              );
-                            }}
-                          >
-                            <Trash2Icon className="size-4" />
-                          </Button>
-                        </div>
-                      )}
-
-                      {/* Exibir o nome do arquivo com link para tela cheia para arquivos não visuais */}
-                      {fileName && !preview && (
-                        <div className="flex items-center justify-between rounded-md border p-2">
-                          <a
-                            href={
-                              field.value && typeof field.value === "object" && "src" in field.value
-                                ? (field.value as { src: string }).src
-                                : undefined
-                            }
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-sm text-blue-600 underline"
-                          >
-                            {fileName}
-                          </a>
-                          <Button
-                            className="absolute right-0 top-0"
-                            type="button"
-                            variant="destructive"
-                            size="icon"
-                            onClick={() => {
-                              if (Array.isArray(field.value)) {
-                                const fileToDelete = field.value.find(
-                                  (f) => typeof f === "object" && "id" in f,
-                                );
-                                if (fileToDelete && fileToDelete.id) {
-                                  deleteFileMutation.mutate(fileToDelete.id); // ✅ Agora chamamos o backend para excluir o arquivo real
-                                }
-                              }
-
-                              setPreview(null);
-                              setFileName(null);
-                              field.onChange(
-                                (field.value ?? []).filter((f) => {
-                                  if (f instanceof File) {
-                                    return f.name !== fileName; // ✅ Compara arquivos temporários pelo nome
-                                  }
-                                  if (typeof f === "object" && "src" in f) {
-                                    return f.src !== preview; // ✅ Compara arquivos salvos pela URL
-                                  }
-                                  return true;
-                                }),
-                              );
-                            }}
-                          >
-                            <Trash2Icon className="size-4" />
-                          </Button>
-                        </div>
-                      )}
-
-                      <FormMessage />
-                    </FormItem>
-                  );
-                }}
+                render={({ field }) => (
+                  <FileUploadField
+                    field={field}
+                    task={task}
+                    taskId={taskId}
+                    form={form}
+                    queryClient={queryClient}
+                  />
+                )}
               />
             )}
 
